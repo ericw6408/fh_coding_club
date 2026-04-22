@@ -5,7 +5,7 @@ from time import sleep as delay
 
 # class to handle joystick positions
 
-fclass Joystick():
+class Joystick():
     def __init__(self,pinx:machine.ADC,piny:machine.ADC):
         initialx = pinx.read_u16()
         initialy = piny.read_u16()
