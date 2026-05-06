@@ -10,11 +10,14 @@ class Joystick:
         invert_x: bool = False,
         invert_y: bool = False,
         deadzone: float = 5.0,
+        # Backwards-compatible aliases for the old camelCase parameter names
+        invertX: bool = None,
+        invertY: bool = None,
     ):
         self.x_pin    = pinx
         self.y_pin    = piny
-        self.invert_x = invert_x
-        self.invert_y = invert_y
+        self.invert_x = invert_x if invertX is None else invertX
+        self.invert_y = invert_y if invertY is None else invertY
         self.deadzone = deadzone
 
         # Record resting position as the centre reference point (0.0 – 100.0)
@@ -30,7 +33,7 @@ class Joystick:
         # physical travel always maps to 0 – 100, regardless of where
         # the stick happens to rest.
         #
-        # Lower half: [0, centre]  → [0,  50]
+        # Lower half: [0, centre]   → [0,  50]
         # Upper half: [centre, 100] → [50, 100]
         if raw < centre:
             scaled = (raw / centre) * 50.0 if centre > 0 else 0.0
