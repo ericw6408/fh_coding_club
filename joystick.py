@@ -1,48 +1,61 @@
 import machine
-from time import sleep as delay
 
 
+class Joystick:
 
-# class to handle joystick positions
+    def __init__(
+        self,
+        pinx: machine.ADC,
+        piny: machine.ADC,
+        invert_x: bool = False,
+        invert_y: bool = False,
+        deadzone: float = 5.0,
+    ):
+        self.x_pin    = pinx
+        self.y_pin    = piny
+        self.invert_x = invert_x
+        self.invert_y = invert_y
+        self.deadzone = deadzone
 
-class Joystick():
-    def __init__(self,pinx:machine.ADC,piny:machine.ADC,invertX = False, invertY = False):
-        self.inverts = [invertX,invertY]
-        initialx = pinx.read_u16()
-        initialy = piny.read_u16()
-        
-        initialx /= (65536/100) # offset is as a pct
-        initialy /= (65536/100)
-        self.x_offset = 0
-        self.y_offset = 0
-        if self.inverts[0]:
-            self.x_offset = round(initialx,2)
+        # Record resting position as the centre reference point (0.0 – 100.0)
+        self.x_centre = (pinx.read_u16() / 65535) * 100.0
+        self.y_centre = (piny.read_u16() / 65535) * 100.0
+
+    # ------------------------------------------------------------------ #
+
+    def _read_axis(self, pin: machine.ADC, centre: float, invert: bool) -> float:
+        raw = (pin.read_u16() / 65535) * 100.0
+
+        # Rescale each half of the range independently so the full
+        # physical travel always maps to 0 – 100, regardless of where
+        # the stick happens to rest.
+        #
+        # Lower half: [0, centre]  → [0,  50]
+        # Upper half: [centre, 100] → [50, 100]
+        if raw < centre:
+            scaled = (raw / centre) * 50.0 if centre > 0 else 0.0
         else:
-            self.x_offset = (50 - round(initialx,2)) 
-        
-        if self.inverts[1]:
-            self.y_offset = round(initialy,2)
-        else:
-            self.x_offset = (50 - round(initialy,2))
-        
-        
-        self.x_pin = pinx
-        self.y_pin = piny
-        
-    
-    def get_x(self):
-        if self.inverts[0]:
-            return 100 - round(((self.x_pin.read_u16() * 100) / 65536) + self.x_offset,2)
-        else:
-            return round(((self.x_pin.read_u16() * 100) / 65536) + self.x_offset,2)
-    def get_y(self):
-        if self.inverts[1]:
-            return 100 - round(((self.y_pin.read_u16() * 100) / 65536) + self.y_offset,2)
-        else:
-            return round(((self.y_pin.read_u16() * 100) / 65536) + self.y_offset,2)
-    
-    def get_pos(self)->list:
-        # returns a list of [x_pct,y_pct] AFTER applying the offset.
-        
-        # since read_u16 returns a linearly scaling value from 0 to 100, then:
-        return [get_x(),get_y()]    
+            remaining = 100.0 - centre
+            scaled = 50.0 + ((raw - centre) / remaining) * 50.0 if remaining > 0 else 100.0
+
+        # Clamp just in case of ADC noise at the extremes
+        scaled = max(0.0, min(100.0, scaled))
+
+        # Snap to neutral inside the deadzone
+        if abs(scaled - 50.0) < self.deadzone:
+            scaled = 50.0
+
+        value = (100.0 - scaled) if invert else scaled
+        return round(value, 2)
+
+    # ------------------------------------------------------------------ #
+
+    def get_x(self) -> float:
+        return self._read_axis(self.x_pin, self.x_centre, self.invert_x)
+
+    def get_y(self) -> float:
+        return self._read_axis(self.y_pin, self.y_centre, self.invert_y)
+
+    def get_pos(self) -> list:
+        """Returns [x_pct, y_pct] — always in the range 0.0 – 100.0."""
+        return [self.get_x(), self.get_y()]
