@@ -15,7 +15,7 @@ from sh1106 import SH1106_I2C
 
 PIN_JOY_X   = 34
 PIN_JOY_Y   = 35
-PIN_SHOOT   = 6
+PIN_SHOOT   = 17
 
 PIN_SDA     = 21
 PIN_SCL     = 22
@@ -40,7 +40,7 @@ joy = Joystick(
     invert_y = False,
 )
 
-shoot = machine.Pin(PIN_SHOOT, machine.Pin.IN, machine.Pin.PULL_UP)
+shoot = machine.Pin(PIN_SHOOT, machine.Pin.IN)
 
 i2c  = machine.I2C(0, scl=machine.Pin(PIN_SCL), sda=machine.Pin(PIN_SDA), freq=400_000)
 oled = SH1106_I2C(OLED_WIDTH, OLED_HEIGHT, i2c, addr=I2C_ADDR)
@@ -55,7 +55,7 @@ def get_command() -> str:
     Reads joystick + shoot button and returns one command character.
     Priority: shoot > horizontal > vertical
     """
-    if shoot.value() == 0:
+    if shoot.value() == 1:
         return 'S'
 
     x = joy.get_x()
