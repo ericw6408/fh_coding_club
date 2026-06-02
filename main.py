@@ -23,6 +23,7 @@ OLED_HEIGHT   = 64
 JOY_THRESHOLD = 25
 PLAYER_ID     = 1
 OLED_INTERVAL = 100   # ms between OLED redraws
+SHOOT_DEBOUNCE_MS = 250  # ms to suppress repeated shoot signals
 
 # ─────────────────────────────────────────────
 #  Peripheral Initialisation
@@ -33,12 +34,12 @@ adc_y = machine.ADC(machine.Pin(PIN_JOY_Y))
 adc_x.atten(machine.ADC.ATTN_11DB)
 adc_y.atten(machine.ADC.ATTN_11DB)
 
-joy = Joystick(pinx=adc_x, piny=adc_y)
+joy = Joystick(pinx=adc_x, piny=adc_y, invertX=True, invertY=True)
 
 shoot = machine.Pin(PIN_SHOOT, machine.Pin.IN)
 
 i2c  = machine.I2C(0, scl=machine.Pin(PIN_SCL), sda=machine.Pin(PIN_SDA), freq=100_000)
-oled = SH1106_I2C(OLED_WIDTH, OLED_HEIGHT, i2c, addr=I2C_ADDR,rotate=180)
+oled = SH1106_I2C(OLED_WIDTH, OLED_HEIGHT, i2c, addr=I2C_ADDR, rotate=180)
 oled.sleep(False)
 
 # ─────────────────────────────────────────────
@@ -152,28 +153,37 @@ oled.text("P{} CONTROLLER".format(PLAYER_ID), 4, 20)
 oled.text("Waiting...", 24, 34)
 oled.show()
 
-last_cmd        = 'N'
-last_real_cmd   = 'N'
-last_state      = {}
+last_cmd         = 'N'
+last_state       = {}
 last_oled_update = utime.ticks_ms()
+last_shoot_time  = 0
 
 while True:
     # ── Serial ────────────────────────────────────────────────────────────
-    if select.select([sys.stdin], [], [], 0)[0]:
+    latest_line = None
+    while select.select([sys.stdin], [], [], 0)[0]:
         line = sys.stdin.readline().strip()
+        if line:
+            latest_line = line
 
-        if not line:
-            continue
-
+    if latest_line is not None:
         try:
-            #tick1 = state.get("tick",    0)
-            state = json.loads(line)               # parse the incoming JSON into 'state'
-            last_state = state                     # keep a copy for OLED redraws
+            state      = json.loads(latest_line)
+            last_state = state
 
             cmd = 'N'
             if state.get("status") == "playing":
-                cmd = get_command()
+                raw = get_command()
 
+                if raw == 'S':
+                    now_ms = utime.ticks_ms()
+                    if utime.ticks_diff(now_ms, last_shoot_time) >= SHOOT_DEBOUNCE_MS:
+                        last_shoot_time = now_ms
+                        cmd = 'S'
+                else:
+                    cmd = raw
+
+            last_cmd = cmd
             sys.stdout.write(cmd + '\n')
         except (ValueError, KeyError):
             pass
@@ -185,3 +195,4 @@ while True:
         last_oled_update = now
 
     utime.sleep_ms(10)
+
